@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Protocol {
+  HLS
+  ICECAST
+  HTTP_PUSH
+}
+
+enum ChannelStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AdminRole {
+  SUPERADMIN
+  MODERATOR
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Channel {
+  id            String          @id @default(cuid())
+  slug          String          @unique
+  name          String
+  description   String?
+  featured      Boolean         @default(false)
+  status        ChannelStatus   @default(ACTIVE)
+  popularity    Float           @default(0)
+  lastDecayAt   DateTime        @default(now())
+  source        Source?
+  sourceHistory SourceHistory[]
+  tags          ChannelTag[]
+  submissions   Submission[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Source {
+  id        String   @id @default(cuid())
+  channelId String   @unique
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  protocol  Protocol
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SourceHistory {
+  id         String   @id @default(cuid())
+  channelId  String
+  channel    Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  protocol   Protocol
+  url        String
+  replacedBy String?
+  createdAt  DateTime @default(now())
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  channels ChannelTag[]
+}
+
+model ChannelTag {
+  channelId String
+  tagId     String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, tagId])
+}
+
+model AdminUser {
+  id           String       @id @default(cuid())
+  username     String       @unique
+  passwordHash String
+  role         AdminRole    @default(MODERATOR)
+  disabled     Boolean      @default(false)
+  submissions  Submission[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Submission {
+  id              String           @id @default(cuid())
+  url             String
+  protocol        Protocol
+  targetChannelId String?
+  targetChannel   Channel?         @relation(fields: [targetChannelId], references: [id], onDelete: SetNull)
+  suggestedSlug   String?
+  suggestedName   String?
+  note            String?
+  contact         String?
+  status          SubmissionStatus @default(PENDING)
+  reviewedBy      String?
+  reviewer        AdminUser?       @relation(fields: [reviewedBy], references: [id])
+  reviewNote      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

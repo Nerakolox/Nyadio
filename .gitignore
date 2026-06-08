@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Prisma generated client
+packages/server/src/generated/
+
+# Vite cache
+.vite/
+packages/web/.vite/
+
+# HLS temp segments
+hls/
+tmp/hls/
+
+# Binaries
+tools/ffmpeg/*.exe
+tools/ffmpeg/ffmpeg
+tools/ffmpeg/ffprobe
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage/
+.nyc_output/

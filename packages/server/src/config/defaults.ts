@@ -1,0 +1,11 @@
+export const APP_CONFIG_DEFAULTS = {
+  MAX_ACTIVE_CHANNELS: "20",
+  ALWAYS_ON_ACTIVE_CHANNELS: "1",
+  HLS_SEGMENT_DURATION: "6",
+  HLS_WINDOW_SIZE: "5",
+  IDLE_TIMEOUT_MS: "30000",
+  MAX_RETRY: "3",
+  SUBMISSION_RATE_LIMIT: "5"
+} as const;
+
+export type AppConfigKey = keyof typeof APP_CONFIG_DEFAULTS;
