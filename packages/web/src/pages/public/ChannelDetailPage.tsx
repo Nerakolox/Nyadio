@@ -1,161 +1,27 @@
 import { Check, Clipboard, Copy, Headphones, Link2, Pause, Play, RadioTower, RotateCw, Volume2, VolumeX } from "lucide-react";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { usePublicChannel } from "../../api/public/hooks";
-import type { PlayState, PublicChannelDetail } from "../../api/public/types";
+import type { PlayState } from "../../api/public/types";
 import { PlayStateBadge } from "../../components/ChannelCard";
+import { usePlayer, type PlaybackPhase, type PlaybackStatus } from "../../components/player/PlayerProvider";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 
-type PlaybackPhase = "idle" | "starting" | "connecting" | "playing" | "paused" | "blocked" | "error";
-
-interface PlaybackStatus {
-  phase: PlaybackPhase;
-  message: string | null;
-}
-
 export function ChannelDetailPage() {
   const { slug } = useParams();
   const channel = usePublicChannel(slug);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const playbackRunRef = useRef(0);
-  const currentPlaybackUrlRef = useRef<string | null>(null);
-  const suppressAudioErrorRef = useRef(false);
-  const [playRequested, setPlayRequested] = useState(false);
-  const [playback, setPlayback] = useState<PlaybackStatus>({ phase: "idle", message: null });
-  const [playerError, setPlayerError] = useState<string | null>(null);
+  const player = usePlayer();
   const [copied, setCopied] = useState<"hls" | "stream" | null>(null);
-  const [volume, setVolume] = useState(35);
-  const [muted, setMuted] = useState(false);
 
   const data = channel.data;
   const isNotFound = channel.error instanceof ApiError && channel.error.status === 404;
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = volume / 100;
-    audio.muted = muted || volume === 0;
-  }, [muted, volume]);
-
-  useEffect(() => {
-    setPlayRequested(false);
-    setPlayback({ phase: "idle", message: null });
-    setPlayerError(null);
-    teardownPlayback();
-
-    return () => {
-      teardownPlayback();
-    };
-  }, [slug]);
-
-  useEffect(() => {
-    if (!data || !playRequested) return;
-
-    if (data.playState === "unavailable") {
-      const message = "频道当前不可用，后端未能启动音频流。";
-      setPlayback({ phase: "error", message });
-      setPlayerError(message);
-    }
-  }, [data?.playState, playRequested]);
-
   async function requestPlayback() {
-    if (!data || data.playState === "unavailable" || playback.phase === "starting" || playback.phase === "connecting") return;
-
-    if (playback.phase === "playing") {
-      audioRef.current?.pause();
-      setPlayback({ phase: "paused", message: "播放已暂停。" });
-      return;
-    }
-
-    setPlayRequested(true);
-    setPlayerError(null);
-
-    if (playback.phase === "paused" && currentPlaybackUrlRef.current === data.outputs.stream && audioRef.current?.src) {
-      await resumePlayback();
-      return;
-    }
-
-    await attachStreamPlayback(data);
-  }
-
-  async function resumePlayback(): Promise<void> {
-    const audio = audioRef.current;
-    if (!audio) return;
-    setPlayback({ phase: "connecting", message: "正在恢复播放..." });
-    try {
-      await audio.play();
-      setPlayback({ phase: "playing", message: null });
-      setPlayerError(null);
-    } catch {
-      const message = "浏览器拦截了播放，请再次点击播放按钮。";
-      setPlayback({ phase: "blocked", message });
-      setPlayerError(message);
-    }
-  }
-
-  async function attachStreamPlayback(channelData: PublicChannelDetail): Promise<void> {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const runId = playbackRunRef.current + 1;
-    playbackRunRef.current = runId;
-    teardownPlayback({ keepRunId: true });
-    currentPlaybackUrlRef.current = channelData.outputs.stream;
-    setPlayerError(null);
-    setPlayback({ phase: "connecting", message: "正在连接 AAC 直连流..." });
-
-    audio.src = channelData.outputs.stream;
-    audio.volume = volume / 100;
-    audio.muted = muted || volume === 0;
-    audio.load();
-    try {
-      await audio.play();
-      if (playbackRunRef.current === runId) {
-        setPlayback({ phase: "playing", message: null });
-        setPlayerError(null);
-      }
-    } catch {
-      if (playbackRunRef.current !== runId) return;
-      const message = "浏览器拦截了自动播放，请点击播放器上的播放按钮。";
-      currentPlaybackUrlRef.current = null;
-      setPlayback({ phase: "blocked", message });
-      setPlayerError(message);
-    }
-  }
-
-  function teardownPlayback(options: { keepRunId?: boolean } = {}) {
-    if (!options.keepRunId) playbackRunRef.current += 1;
-    currentPlaybackUrlRef.current = null;
-
-    const audio = audioRef.current;
-    if (!audio) return;
-    suppressAudioErrorRef.current = true;
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-    window.setTimeout(() => {
-      suppressAudioErrorRef.current = false;
-    }, 0);
-  }
-
-  function handleAudioPlay() {
-    if (playRequested) setPlayback({ phase: "playing", message: null });
-  }
-
-  function handleAudioPause() {
-    if (suppressAudioErrorRef.current || !playRequested || playback.phase === "error") return;
-    setPlayback({ phase: "paused", message: "播放已暂停。" });
-  }
-
-  function handleAudioError() {
-    if (suppressAudioErrorRef.current || !playRequested || playback.phase === "error") return;
-    const message = "AAC 直连流加载失败，请重试或复制输出地址到外部播放器。";
-    setPlayback({ phase: "error", message });
-    setPlayerError(message);
-    currentPlaybackUrlRef.current = null;
+    if (!data || data.playState === "unavailable" || data.playState === "inactive" || player.phase === "connecting") return;
+    await player.toggleChannel(data);
   }
 
   async function copy(kind: "hls" | "stream", value: string) {
@@ -164,8 +30,11 @@ export function ChannelDetailPage() {
     window.setTimeout(() => setCopied(null), 1600);
   }
 
-  const playButtonDisabled = data?.playState === "unavailable" || playback.phase === "starting" || playback.phase === "connecting";
-  const volumeLabel = muted || volume === 0 ? "已静音" : `${volume}%`;
+  const isCurrentChannel = data ? player.isCurrentChannel(data) : false;
+  const playback = isCurrentChannel ? { phase: player.phase, message: player.message } : { phase: "idle" as const, message: null };
+  const playerError = isCurrentChannel ? player.error : null;
+  const playButtonDisabled = data?.playState === "unavailable" || data?.playState === "inactive" || (isCurrentChannel && player.phase === "connecting");
+  const volumeLabel = player.muted || player.volume === 0 ? "已静音" : `${player.volume}%`;
 
   if (channel.isLoading) {
     return (
@@ -242,15 +111,6 @@ export function ChannelDetailPage() {
                 </span>
               </div>
 
-              <audio
-                ref={audioRef}
-                className="hidden"
-                preload="none"
-                onError={handleAudioError}
-                onPause={handleAudioPause}
-                onPlay={handleAudioPlay}
-              />
-
               <div className="grid gap-4 p-5">
                 <div className="flex flex-col gap-5 rounded-[var(--nya-radius-lg)] border border-[var(--nya-border)] bg-[var(--nya-surface-subtle)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] md:flex-row md:items-center">
                   <Button
@@ -283,30 +143,29 @@ export function ChannelDetailPage() {
 
                   <div className="min-w-0 md:w-[280px]">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setMuted((value) => !value)}
-                      className="inline-flex size-9 cursor-pointer items-center justify-center rounded-full bg-[var(--nya-surface)] text-[var(--nya-text-secondary)] shadow-[var(--nya-shadow-sm)] transition hover:scale-[1.05] hover:text-[var(--nya-primary-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--nya-focus-ring)] active:scale-[0.96]"
-                      aria-label={muted || volume === 0 ? "取消静音" : "静音"}
-                    >
-                      {muted || volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-                    </button>
-                    <span className="rounded-[var(--nya-radius-pill)] bg-[var(--nya-surface)] px-2.5 py-1 font-mono text-xs font-semibold tabular-nums text-[var(--nya-text-secondary)] shadow-[var(--nya-shadow-sm)]">
-                      {volumeLabel}
-                    </span>
+                      <button
+                        type="button"
+                        onClick={() => player.setMuted(!player.muted)}
+                        className="inline-flex size-9 cursor-pointer items-center justify-center rounded-full bg-[var(--nya-surface)] text-[var(--nya-text-secondary)] shadow-[var(--nya-shadow-sm)] transition hover:scale-[1.05] hover:text-[var(--nya-primary-strong)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--nya-focus-ring)] active:scale-[0.96]"
+                        aria-label={player.muted || player.volume === 0 ? "取消静音" : "静音"}
+                      >
+                        {player.muted || player.volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                      </button>
+                      <span className="rounded-[var(--nya-radius-pill)] bg-[var(--nya-surface)] px-2.5 py-1 font-mono text-xs font-semibold tabular-nums text-[var(--nya-text-secondary)] shadow-[var(--nya-shadow-sm)]">
+                        {volumeLabel}
+                      </span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
-                      value={volume}
+                      value={player.volume}
                       onChange={(event) => {
                         const next = Number.parseInt(event.target.value, 10);
-                        setVolume(next);
-                        if (next > 0) setMuted(false);
+                        player.setVolume(next);
                       }}
                       className="nya-volume-slider"
-                      style={{ "--nya-volume": `${volume}%` } as CSSProperties}
+                      style={{ "--nya-volume": `${player.volume}%` } as CSSProperties}
                       aria-label="音量"
                     />
                   </div>
@@ -365,7 +224,6 @@ function playerHint(state: PlayState, playback: PlaybackStatus): string {
 }
 
 function playButtonLabel(phase: PlaybackPhase): string {
-  if (phase === "starting") return "正在启动";
   if (phase === "connecting") return "正在连接";
   if (phase === "playing") return "正在播放";
   if (phase === "paused") return "继续播放";

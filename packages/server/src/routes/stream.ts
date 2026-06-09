@@ -15,7 +15,12 @@ async function ensureStreamable(entry: ChannelEntry, reply: FastifyReply): Promi
     return false;
   }
   try {
-    await channelRegistry.ensureStarted(entry);
+    await Promise.race([
+      channelRegistry.ensureStarted(entry),
+      sleep(channelRegistry.startTimeoutMs() + 1000).then(() => {
+        throw new Error("STREAM_START_TIMEOUT");
+      })
+    ]);
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "START_FAILED";
@@ -88,11 +93,18 @@ export async function registerStreamRoutes(app: FastifyInstance): Promise<void> 
     }, 10000);
     heartbeat.unref();
 
-    req.raw.on("close", () => {
+    let closed = false;
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
       clearInterval(heartbeat);
       entry.broadcaster.removeClient(reply);
       channelRegistry.refreshListenerCount(entry);
-    });
+    };
+
+    req.raw.on("close", cleanup);
+    reply.raw.on("close", cleanup);
+    reply.raw.on("error", cleanup);
   });
 
   app.get<{ Params: { slug: string; n: string } }>("/stream/:slug/seg_:n.aac", async (req, reply) => {

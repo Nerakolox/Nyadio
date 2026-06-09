@@ -139,6 +139,12 @@ class ChannelRegistry {
     if (entry.state === "error") {
       throw new Error("CHANNEL_ERROR");
     }
+    if (entry.state === "running" && !entry.process) {
+      entry.state = "idle";
+      entry.broadcaster.detach();
+      this.refreshListenerCount(entry);
+      await cleanupHlsDir(entry.channel.slug);
+    }
     if (entry.state === "running") return;
     if (entry.startPromise) return entry.startPromise;
 
@@ -152,6 +158,10 @@ class ChannelRegistry {
       entry.startPromise = null;
     });
     return entry.startPromise;
+  }
+
+  startTimeoutMs(): number {
+    return Math.max(5000, configStore.getInt("HLS_SEGMENT_DURATION") * 1000 + 5000);
   }
 
   async forceStart(channelId: string): Promise<void> {
@@ -221,8 +231,7 @@ class ChannelRegistry {
     entry.process = proc;
     if (proc.stdout) entry.broadcaster.attach(proc.stdout);
     try {
-      const startupTimeoutMs = Math.max(5000, configStore.getInt("HLS_SEGMENT_DURATION") * 1000 + 5000);
-      await proc.start(startupTimeoutMs);
+      await proc.start(this.startTimeoutMs());
       if (proc.stdout) entry.broadcaster.attach(proc.stdout);
       entry.state = "running";
       entry.retryCount = 0;
@@ -288,7 +297,8 @@ class ChannelRegistry {
 
   private async ensureAlwaysOn(entry: ChannelEntry): Promise<void> {
     this.syncVirtualListeners(entry);
-    if (entry.virtualListenerCount === 0 || entry.state === "running" || entry.state === "starting" || entry.state === "error") return;
+    if (entry.virtualListenerCount === 0 || entry.state === "starting" || entry.state === "error") return;
+    if (entry.state === "running" && entry.process) return;
     try {
       await this.ensureStarted(entry);
     } catch {

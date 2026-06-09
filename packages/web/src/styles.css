@@ -133,6 +133,10 @@ body {
   font-family: var(--nya-font-sans);
 }
 
+body.nya-has-floating-player {
+  padding-bottom: 112px;
+}
+
 button,
 input,
 select,

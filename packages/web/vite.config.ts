@@ -23,7 +23,7 @@ export default defineConfig({
     proxy: {
       "/admin": {
         target: "https://nyadio.feedra.org",
-        // target: "http://localhost:3000",
+        // target: "http://127.0.0.1:13001",
         bypass(req) {
           if (req.method === "GET" && req.headers.accept?.includes("text/html")) {
             return "/index.html";
@@ -34,9 +34,9 @@ export default defineConfig({
       "/api": "https://nyadio.feedra.org",
       "/stream": "https://nyadio.feedra.org",
       "/health": "https://nyadio.feedra.org"
-      // "/api": "http://localhost:3000",
-      // "/stream": "http://localhost:3000",
-      // "/health": "http://localhost:3000"
+      // "/api": "http://127.0.0.1:13001",
+      // "/stream": "http://127.0.0.1:13001",
+      // "/health": "http://127.0.0.1:13001"
     }
   }
 });

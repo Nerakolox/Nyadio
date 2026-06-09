@@ -31,7 +31,7 @@ export class FfmpegProcess {
     });
 
     child.then((result) => {
-      const normal = this.stopping || result.exitCode === 0;
+      const normal = this.stopping;
       this.child = null;
       this.onExit(normal);
     }).catch(() => {

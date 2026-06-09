@@ -1,12 +1,26 @@
 import type { FastifyReply } from "fastify";
 import type { Readable } from "node:stream";
 
+const MAX_CLIENT_BUFFER_BYTES = 1024 * 1024;
+
 export class StreamBroadcaster {
   private clients = new Set<FastifyReply>();
   private stdout: Readable | null = null;
   private onData = (chunk: Buffer) => {
     for (const reply of this.clients) {
-      reply.raw.write(chunk);
+      const socket = reply.raw.socket;
+      if (!socket || reply.raw.destroyed || socket.destroyed || socket.writableLength > MAX_CLIENT_BUFFER_BYTES) {
+        this.dropClient(reply);
+        continue;
+      }
+      try {
+        const writable = reply.raw.write(chunk);
+        if (!writable && socket.writableLength > MAX_CLIENT_BUFFER_BYTES) {
+          this.dropClient(reply);
+        }
+      } catch {
+        this.dropClient(reply);
+      }
     }
   };
 
@@ -39,5 +53,10 @@ export class StreamBroadcaster {
 
   get listenerCount(): number {
     return this.clients.size;
+  }
+
+  private dropClient(reply: FastifyReply): void {
+    this.clients.delete(reply);
+    if (!reply.raw.destroyed) reply.raw.destroy();
   }
 }

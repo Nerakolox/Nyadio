@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AdminLayout } from "./components/AdminLayout";
 import { PageTitle } from "./components/PageTitle";
 import { PublicLayout } from "./components/PublicLayout";
+import { FloatingPlayer } from "./components/player/FloatingPlayer";
+import { PlayerProvider } from "./components/player/PlayerProvider";
 import { AdminsPage } from "./pages/admin/AdminsPage";
 import { ChannelDetailPage } from "./pages/admin/ChannelDetailPage";
 import { ChannelsPage } from "./pages/admin/ChannelsPage";
@@ -17,7 +19,7 @@ import { TagPage } from "./pages/public/TagPage";
 
 export function App() {
   return (
-    <>
+    <PlayerProvider>
       <PageTitle />
       <Routes>
         <Route path="/" element={<PublicLayout />}>
@@ -39,6 +41,7 @@ export function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+      <FloatingPlayer />
+    </PlayerProvider>
   );
 }
